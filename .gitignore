@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.wrangler/
+.env
+config.local.json
+*.log
+*.failed.txt
+.DS_Store
+Thumbs.db

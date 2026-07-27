@@ -1,0 +1,7 @@
+*.jar binary
+*.zip binary
+*.sha256 text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+.env.example text eol=lf
+*.md text eol=lf
