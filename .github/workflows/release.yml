@@ -1,0 +1,177 @@
+name: test-and-release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fxap-only-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test on Node.js ${{ matrix.node-version }}
+    runs-on: windows-2022
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Syntax check
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @('.\index.js') + @(Get-ChildItem .\src -Filter *.js -File | ForEach-Object FullName)
+          foreach ($file in $files) {
+            node --check $file
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
+          }
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\tools\Build-Release.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count) { throw ($errors.Message -join [Environment]::NewLine) }
+      - name: Unit tests
+        shell: powershell
+        run: |
+          npm.cmd test
+          if ($LASTEXITCODE -ne 0) { throw "Unit tests failed: $LASTEXITCODE" }
+
+  package:
+    name: Build Windows component release
+    needs: test
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare stable release version
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $declared = (Get-Content -LiteralPath '.\VERSION' -Raw -Encoding UTF8).Trim()
+          if ($declared -notmatch '^v(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)$') {
+            throw "VERSION must contain a stable vSemVer value: $declared"
+          }
+          $baseMajor = [int]$Matches['major']
+          $baseMinor = [int]$Matches['minor']
+          $basePatch = [int]$Matches['patch']
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $releaseTag = $env:GITHUB_REF_NAME
+            if ($releaseTag -notmatch '^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$') {
+              throw "Only stable vSemVer tags can be released: $releaseTag"
+            }
+          } else {
+            $releasePatch = [Math]::Max($basePatch, [int]$env:GITHUB_RUN_NUMBER)
+            $releaseTag = "v$baseMajor.$baseMinor.$releasePatch"
+          }
+          $assetName = "fxap-only-$releaseTag-windows.zip"
+          $publish = if ($env:GITHUB_EVENT_NAME -eq 'pull_request') { 'false' } else { 'true' }
+          $environmentLines = @(
+            "FXAP_RELEASE_TAG=$releaseTag"
+            "FXAP_ASSET_NAME=$assetName"
+            "FXAP_PUBLISH=$publish"
+          ) -join [Environment]::NewLine
+          $encoding = New-Object Text.UTF8Encoding($false)
+          [IO.File]::AppendAllText(
+            $env:GITHUB_ENV,
+            $environmentLines + [Environment]::NewLine,
+            $encoding
+          )
+          Write-Host "Release tag: $releaseTag"
+          Write-Host "Asset: $assetName"
+      - name: Build release archive
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-Release.ps1 -Version $env:FXAP_RELEASE_TAG
+          if ($LASTEXITCODE -ne 0) { throw "Release builder failed: $LASTEXITCODE" }
+      - name: Verify release archive
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = Join-Path (Resolve-Path '.\dist') $env:FXAP_ASSET_NAME
+          $checksum = "$asset.sha256"
+          if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) { throw "Missing release asset: $asset" }
+          if (-not (Test-Path -LiteralPath $checksum -PathType Leaf)) { throw "Missing checksum asset: $checksum" }
+          $checksumText = [IO.File]::ReadAllText($checksum)
+          $expectedHash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($checksumText -notmatch "(?im)^$expectedHash\s+$([regex]::Escape($env:FXAP_ASSET_NAME))\s*$") {
+            throw 'Release checksum content does not match the ZIP.'
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead($asset)
+          try {
+            $rootName = "fxap-only-$($env:FXAP_RELEASE_TAG)"
+            $roots = @($archive.Entries | ForEach-Object {
+              $_.FullName.Replace('\', '/').Split('/')[0]
+            } | Where-Object { $_ } | Select-Object -Unique)
+            if ($roots.Count -ne 1 -or $roots[0] -ne $rootName) {
+              throw "Release ZIP root mismatch: $($roots -join ', ')"
+            }
+            $requiredEntries = @(
+              'index.js',
+              'package.json',
+              'VERSION',
+              'component-manifest.json',
+              'src/cloudflare-grants.js',
+              'src/keymaster.js',
+              'tools/unluac54.jar',
+              'tools/unluac54.jar.sha256'
+            ) | ForEach-Object { "$rootName/$_" }
+            $entryNames = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+            foreach ($entry in $requiredEntries) {
+              if ($entry -notin $entryNames) { throw "Release ZIP is missing: $entry" }
+            }
+          } finally {
+            $archive.Dispose()
+          }
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fxap-only-${{ github.sha }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Publish stable GitHub Release
+        if: env.FXAP_PUBLISH == 'true'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $asset = Join-Path (Resolve-Path '.\dist') $env:FXAP_ASSET_NAME
+          $checksum = "$asset.sha256"
+          $ErrorActionPreference = 'SilentlyContinue'
+          gh release view $env:FXAP_RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          $releaseExists = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = 'Stop'
+          if ($releaseExists) {
+            gh release upload $env:FXAP_RELEASE_TAG $asset $checksum --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update release assets: $LASTEXITCODE" }
+            gh release edit $env:FXAP_RELEASE_TAG --latest --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $env:FXAP_RELEASE_TAG $asset $checksum --target $env:GITHUB_SHA --title $env:FXAP_RELEASE_TAG --generate-notes --latest --repo $env:GITHUB_REPOSITORY
+          }
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release command failed: $LASTEXITCODE" }
+          $assets = @(gh release view $env:FXAP_RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          foreach ($required in @($env:FXAP_ASSET_NAME, "$($env:FXAP_ASSET_NAME).sha256")) {
+            if ($required -notin $assets) { throw "Published Release is missing asset: $required" }
+          }

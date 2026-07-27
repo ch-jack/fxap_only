@@ -1,5 +1,6 @@
 node_modules/
 coverage/
+dist/
 .wrangler/
 .env
 config.local.json

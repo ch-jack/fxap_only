@@ -30,7 +30,7 @@ CK_GRANTS_CLK_API_URL=https://grantsclk.ckcloud.de5.net
 CK_GRANTS_CLK_API_TOKEN=replace-with-your-bearer-token
 ```
 
-也可以使用同名系统环境变量。只有本地缺少目标 resource ID 的 `grants_clk` 时，才调用带 Bearer 鉴权的 KV 查询接口：
+也可以使用同名系统环境变量。只有本地缺少目标 resource ID 的 `grants_clk` 时，才调用带 Bearer 鉴权的 KV 查询接口。Bearer Token 只由 `fxap_only` 自身读取，CK 免费工具箱不提供、不保存也不传入该 Token：
 
 ```http
 GET /v1/grants-clk/:resourceId
@@ -64,6 +64,18 @@ Content-Type: application/json
 - `0`：全部成功；
 - `1`：至少一个 resource 整体失败；
 - `2`：resource 已处理，但至少一个文件解密失败。
+
+## CK 免费工具箱组件 Release
+
+本仓库按 `component-manifest.json` 发布给 CK 免费工具箱。Release ZIP 只有一个顶层目录，附件名与工具箱登记规则一致：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-Release.ps1
+```
+
+默认生成 `dist/fxap-only-v1.1.1-windows.zip` 和 `dist/fxap-only-v1.1.1-windows.zip.sha256`。ZIP 包含运行源码和 `tools/unluac54.jar`，不包含 `.env`、Node.js、Java、Git 元数据、测试输出或真实密钥。Node.js 18+ 与 Java 仍由用户外部安装；Cloudflare 鉴权继续封装在 `fxap_only` 内部。
+
+推送到 main 后，GitHub Actions 会在 Node.js 18/22 上测试，通过后按 VERSION 的主/次版本和本 workflow 的递增运行编号自动创建稳定 tag 与正式 Release；手工推送稳定 vSemVer tag 时则按该 tag 发布。每个正式 Release 都同时上传 ZIP 和 SHA-256，CK 免费工具箱无需内置该组件，会直接检查并安装最新稳定 Release。
 
 ## 验证
 
