@@ -4,7 +4,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { deriveClientKey, fetchGrantsClk } = require('./src/cloudflare-grants');
+const { deriveClientKey } = require('./src/cloudflare-grants');
+const { fetchResourceGrants, importKeymasterKey } = require('./src/grants-api');
 const { FxapDecryptor } = require('./src/decryptor');
 const {
     defaultOutputRoot,
@@ -28,9 +29,9 @@ Examples:
   node . "cfxk_xxxxxxxxx" "D:\\server\\resources" "C:\\Program Files\\Java\\jdk-21"
 
 The CFX key is optional. Client keys are requested from Cloudflare /v1/derive.
-When Keymaster has no grants_clk for a resource, the authenticated KV fallback
-uses CK_GRANTS_CLK_API_TOKEN or the local .env file. The client-key derivation
-formula is not included in this repository.
+After a CFX key passes official Keymaster validation, its grants are imported
+into the Keymaster grants API. Without a key, grants and grants_clk are queried
+by resource ID. The client-key derivation formula is not included here.
 `);
 }
 
@@ -100,6 +101,38 @@ function formatStats(stats) {
     ].join(' ');
 }
 
+async function loadInitialGrants(cfxKey, dependencies = {}) {
+    const requestOfficial = dependencies.fetchGrants || fetchGrants;
+    const importValidatedKey = dependencies.importKeymasterKey || importKeymasterKey;
+    const logger = dependencies.logger || console;
+    const empty = { grants: {}, grants_clk: {} };
+
+    if (!cfxKey) {
+        logger.log('No CFX key supplied; using the Keymaster grants API by resource ID.');
+        return empty;
+    }
+
+    logger.log('Requesting grants from the official Cfx.re Keymaster...');
+    let grantsPayload;
+    try {
+        grantsPayload = await requestOfficial(cfxKey);
+    } catch (error) {
+        logger.warn(`Keymaster warning: ${error.message}`);
+        logger.warn('The key was not imported; continuing with resource-ID lookup.');
+        return empty;
+    }
+
+    logger.log('Keymaster key is valid; importing grants into the grants API...');
+    try {
+        const result = await importValidatedKey(cfxKey);
+        logger.log(`Grants API import complete: resources=${result.storedResources}`);
+    } catch (error) {
+        logger.warn(`Grants API import warning: ${error.message}`);
+        logger.warn('Continuing with the grants returned by official Keymaster.');
+    }
+    return grantsPayload;
+}
+
 async function main(argv = process.argv.slice(2)) {
     let options;
     try {
@@ -134,18 +167,7 @@ async function main(argv = process.argv.slice(2)) {
         console.log(`Java: ${explicitJava}`);
     }
 
-    let grantsPayload = { grants: {}, grants_clk: {} };
-    if (options.cfxKey) {
-        console.log('Requesting grants from the official Cfx.re Keymaster...');
-        try {
-            grantsPayload = await fetchGrants(options.cfxKey);
-        } catch (error) {
-            console.warn(`Keymaster warning: ${error.message}`);
-            console.warn('Continuing with the authenticated Cloudflare grants fallback.');
-        }
-    } else {
-        console.log('No CFX key supplied; using the authenticated Cloudflare grants fallback.');
-    }
+    const grantsPayload = await loadInitialGrants(options.cfxKey);
 
     const tempSession = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-decryptor-'));
     let failedFiles = 0;
@@ -164,7 +186,7 @@ async function main(argv = process.argv.slice(2)) {
                 const decryptor = new FxapDecryptor({
                     clientKeyDeriver: (resourceId, grantsClk) =>
                         deriveClientKey(resourceId, grantsClk),
-                    grantsClkLookup: (resourceId) => fetchGrantsClk(resourceId),
+                    grantsLookup: (resourceId) => fetchResourceGrants(resourceId),
                     javaDirectory: options.javaDirectory,
                     log: (message) => console.log(message),
                     outputDir,
@@ -209,6 +231,7 @@ if (require.main === module) {
 module.exports = {
     formatStats,
     main,
+    loadInitialGrants,
     parseArguments,
     safeRemoveTemp,
 };

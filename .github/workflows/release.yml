@@ -129,6 +129,7 @@ jobs:
               'VERSION',
               'component-manifest.json',
               'src/cloudflare-grants.js',
+              'src/grants-api.js',
               'src/keymaster.js',
               'tools/unluac54.jar',
               'tools/unluac54.jar.sha256'

@@ -7,13 +7,11 @@ const os = require('os');
 const path = require('path');
 const {
     deriveClientKey,
-    fetchGrantsClk,
     parseEnvText,
     readLocalEnvironment,
     resolveCloudflareConfig,
 } = require('../src/cloudflare-grants');
 
-const TEST_TOKEN = 'test-token-with-at-least-thirty-two-characters';
 const TEST_CLK = 'ab'.repeat(48);
 const TEST_KEY = 'cd'.repeat(32);
 
@@ -21,9 +19,9 @@ test('parses ignored local environment files without mutating process.env', (con
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-cloudflare-env-'));
     context.after(() => fs.rmSync(root, { force: true, recursive: true }));
     const envFile = path.join(root, '.env');
-    fs.writeFileSync(envFile, `# local\nCK_GRANTS_CLK_API_TOKEN="${TEST_TOKEN}"\n`);
+    fs.writeFileSync(envFile, '# local\nCK_CLIENT_KEY_API_URL="https://derive.example"\n');
 
-    assert.equal(readLocalEnvironment(envFile).CK_GRANTS_CLK_API_TOKEN, TEST_TOKEN);
+    assert.equal(readLocalEnvironment(envFile).CK_CLIENT_KEY_API_URL, 'https://derive.example');
     assert.equal(parseEnvText('A=one\nB=\'two\'\n').B, 'two');
 });
 
@@ -31,33 +29,9 @@ test('prefers explicit Cloudflare configuration', () => {
     assert.deepEqual(resolveCloudflareConfig({
         baseUrl: 'https://example.com/',
         environment: {},
-        token: TEST_TOKEN,
     }), {
         baseUrl: 'https://example.com',
-        token: TEST_TOKEN,
     });
-});
-
-test('fetches grants_clk with Bearer authentication', async () => {
-    let requestUrl;
-    let authorization;
-    const result = await fetchGrantsClk('7033', {
-        baseUrl: 'https://example.com',
-        environment: {},
-        fetchImpl: async (url, options) => {
-            requestUrl = url;
-            authorization = options.headers.authorization;
-            return new Response(JSON.stringify({ resourceId: 7033, grants_clk: TEST_CLK }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-            });
-        },
-        token: TEST_TOKEN,
-    });
-
-    assert.equal(result, TEST_CLK);
-    assert.equal(requestUrl, 'https://example.com/v1/grants-clk/7033');
-    assert.equal(authorization, `Bearer ${TEST_TOKEN}`);
 });
 
 test('derives the client key through Cloudflare using the dump-tool protocol', async () => {
@@ -85,36 +59,4 @@ test('derives the client key through Cloudflare using the dump-tool protocol', a
         resourceId: '7033',
         grants_clk: TEST_CLK,
     });
-});
-
-test('returns null for a missing Cloudflare KV record', async () => {
-    const result = await fetchGrantsClk(9, {
-        baseUrl: 'https://example.com',
-        environment: {},
-        fetchImpl: async () => new Response('{}', { status: 404 }),
-        token: TEST_TOKEN,
-    });
-    assert.equal(result, null);
-});
-
-test('requires a configured token without exposing it in errors', async () => {
-    await assert.rejects(
-        fetchGrantsClk(9, { environment: {}, envFile: 'missing-file', token: '' }),
-        /Cloudflare grants token is not configured/,
-    );
-});
-
-test('rejects malformed grants_clk responses', async () => {
-    await assert.rejects(
-        fetchGrantsClk(9, {
-            baseUrl: 'https://example.com',
-            environment: {},
-            fetchImpl: async () => new Response(JSON.stringify({
-                resourceId: 9,
-                grants_clk: 'bad',
-            }), { status: 200 }),
-            token: TEST_TOKEN,
-        }),
-        /invalid grants_clk data/,
-    );
 });

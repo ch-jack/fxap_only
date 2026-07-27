@@ -38,15 +38,11 @@ function resolveCloudflareConfig(options = {}) {
     const environment = options.environment || process.env;
     const localEnvironment = readLocalEnvironment(options.envFile || DEFAULT_ENV_FILE);
     const baseUrl = options.baseUrl
+        || environment.CK_CLIENT_KEY_API_URL
         || environment.CK_GRANTS_CLK_API_URL
+        || localEnvironment.CK_CLIENT_KEY_API_URL
         || localEnvironment.CK_GRANTS_CLK_API_URL
         || DEFAULT_API_URL;
-    const token = options.token
-        || environment.CK_GRANTS_CLK_API_TOKEN
-        || environment.GRANTS_CLK_API_TOKEN
-        || localEnvironment.CK_GRANTS_CLK_API_TOKEN
-        || localEnvironment.GRANTS_CLK_API_TOKEN
-        || '';
 
     let parsedUrl;
     try {
@@ -60,7 +56,6 @@ function resolveCloudflareConfig(options = {}) {
 
     return {
         baseUrl: parsedUrl.toString().replace(/\/$/, ''),
-        token,
     };
 }
 
@@ -84,65 +79,6 @@ function normalizeGrantsClk(grantsClk) {
         throw new Error('grants_clk must be exactly 48 bytes');
     }
     return value.toLowerCase();
-}
-
-async function fetchGrantsClk(resourceId, options = {}) {
-    const normalizedResourceId = normalizeResourceId(resourceId);
-    const { baseUrl, token } = resolveCloudflareConfig(options);
-    if (typeof token !== 'string' || token.length < 32) {
-        throw new Error(
-            'Cloudflare grants token is not configured; set CK_GRANTS_CLK_API_TOKEN or create .env',
-        );
-    }
-
-    const fetchImpl = options.fetchImpl || globalThis.fetch;
-    if (typeof fetchImpl !== 'function') {
-        throw new Error('Node.js 18 or newer is required (global fetch is unavailable)');
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 15_000);
-    let response;
-    try {
-        response = await fetchImpl(`${baseUrl}/v1/grants-clk/${normalizedResourceId}`, {
-            headers: { authorization: `Bearer ${token}` },
-            signal: controller.signal,
-        });
-    } catch (error) {
-        if (error && error.name === 'AbortError') {
-            throw new Error('Cloudflare grants lookup timed out');
-        }
-        throw new Error('Could not reach the Cloudflare grants service');
-    } finally {
-        clearTimeout(timeout);
-    }
-
-    if (response.status === 404) {
-        return null;
-    }
-    if (response.status === 401) {
-        throw new Error('Cloudflare grants service rejected the Bearer token');
-    }
-    if (response.status === 429) {
-        throw new Error('Cloudflare grants service rate limit exceeded; try again later');
-    }
-    if (!response.ok) {
-        throw new Error(`Cloudflare grants service returned HTTP ${response.status}`);
-    }
-
-    let body;
-    try {
-        body = await response.json();
-    } catch (_error) {
-        throw new Error('Cloudflare grants service returned invalid JSON');
-    }
-    if (!body
-        || String(body.resourceId) !== normalizedResourceId
-        || typeof body.grants_clk !== 'string'
-        || !/^[0-9a-f]{96}$/i.test(body.grants_clk)) {
-        throw new Error('Cloudflare grants service returned invalid grants_clk data');
-    }
-    return body.grants_clk.toLowerCase();
 }
 
 async function deriveClientKey(resourceId, grantsClk, options = {}) {
@@ -180,7 +116,7 @@ async function deriveClientKey(resourceId, grantsClk, options = {}) {
     }
 
     if (response.status === 429) {
-        throw new Error('Cloudflare grants service rate limit exceeded; try again later');
+        throw new Error('Cloudflare client-key service rate limit exceeded; try again later');
     }
     if (!response.ok) {
         throw new Error(`Cloudflare key derivation service returned HTTP ${response.status}`);
@@ -204,7 +140,6 @@ async function deriveClientKey(resourceId, grantsClk, options = {}) {
 module.exports = {
     DEFAULT_API_URL,
     deriveClientKey,
-    fetchGrantsClk,
     normalizeGrantsClk,
     normalizeResourceId,
     parseEnvText,

@@ -2,7 +2,6 @@
 
 const crypto = require('crypto');
 const {
-    CLIENT_AES_KEYS,
     DEFAULT_KEY,
     FXAP_HEADER,
     LUA_HEADER,
@@ -123,36 +122,6 @@ function scanResourceId(fxapPayload) {
     return resourceId > 0 ? String(resourceId) : null;
 }
 
-function deriveClientKeyWithAes(grantsClk, aesKey) {
-    if (!Buffer.isBuffer(grantsClk) || grantsClk.length < 32) {
-        return null;
-    }
-    if (!Buffer.isBuffer(aesKey) || aesKey.length !== 32) {
-        return null;
-    }
-
-    try {
-        const decipher = crypto.createDecipheriv(
-            'aes-256-cbc',
-            aesKey,
-            grantsClk.subarray(0, 16),
-        );
-        decipher.setAutoPadding(false);
-        let result = Buffer.concat([
-            decipher.update(grantsClk.subarray(16)),
-            decipher.final(),
-        ]);
-
-        const paddingLength = result[result.length - 1];
-        if (paddingLength > 0 && paddingLength <= 16) {
-            result = result.subarray(0, result.length - paddingLength);
-        }
-        return result;
-    } catch (_error) {
-        return null;
-    }
-}
-
 function uniqueBuffers(buffers) {
     const seen = new Set();
     const result = [];
@@ -169,17 +138,6 @@ function uniqueBuffers(buffers) {
     return result;
 }
 
-function buildLegacyClientKeyCandidates(grantsClk) {
-    if (!Buffer.isBuffer(grantsClk) || grantsClk.length < 16) {
-        return [];
-    }
-
-    return uniqueBuffers([
-        ...CLIENT_AES_KEYS.map((key) => deriveClientKeyWithAes(grantsClk, key)),
-        grantsClk.length >= 48 ? grantsClk.subarray(16, 48) : null,
-    ]);
-}
-
 function parseHexKey(value, label) {
     if (typeof value !== 'string' || value.length === 0 || value.length % 2 !== 0) {
         throw new Error(`${label} is not valid hex data`);
@@ -191,12 +149,10 @@ function parseHexKey(value, label) {
 }
 
 module.exports = {
-    buildLegacyClientKeyCandidates,
     chacha20,
     decryptAt,
     decryptInnerBuffer,
     decryptOuterBuffer,
-    deriveClientKeyWithAes,
     isFxap,
     isLuaBytecode,
     isRsc,

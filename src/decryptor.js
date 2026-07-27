@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const { FILE_CONCURRENCY } = require('./constants');
 const {
-    buildLegacyClientKeyCandidates,
     decryptAt,
     decryptInnerBuffer,
     decryptOuterBuffer,
@@ -82,8 +81,8 @@ class FxapDecryptor {
         this.decompiler = options.decompiler || new JavaDecompiler(this.tempDir, {
             javaDirectory: options.javaDirectory,
         });
-        this.grantsClkLookup = typeof options.grantsClkLookup === 'function'
-            ? options.grantsClkLookup
+        this.grantsLookup = typeof options.grantsLookup === 'function'
+            ? options.grantsLookup
             : null;
         this.clientKeyDeriver = typeof options.clientKeyDeriver === 'function'
             ? options.clientKeyDeriver
@@ -130,8 +129,7 @@ class FxapDecryptor {
             }
         }
 
-        const legacyKeys = grantsClk ? buildLegacyClientKeyCandidates(grantsClk) : [];
-        const keys = uniqueBuffers([directKey, ...legacyKeys]);
+        const keys = uniqueBuffers([directKey]);
         if (keys.length === 0 && !grantsClk) {
             return null;
         }
@@ -465,15 +463,47 @@ class FxapDecryptor {
             grants: { ...(grantsPayload?.grants || {}) },
             grants_clk: { ...(grantsPayload?.grants_clk || {}) },
         };
-        if (!effectiveGrants.grants_clk[resourceId] && this.grantsClkLookup) {
-            this.log(`  grants_clk missing locally; querying Cloudflare for ${resourceId}`);
-            const remoteGrantsClk = await this.grantsClkLookup(resourceId);
-            if (remoteGrantsClk) {
-                effectiveGrants.grants_clk[resourceId] = remoteGrantsClk;
-                if (grantsPayload?.grants_clk) {
-                    grantsPayload.grants_clk[resourceId] = remoteGrantsClk;
+        const needsLookup = !effectiveGrants.grants[resourceId]
+            || !effectiveGrants.grants_clk[resourceId];
+        if (needsLookup && this.grantsLookup) {
+            this.log(`  Key material incomplete locally; querying grants API for ${resourceId}`);
+            try {
+                const remoteGrants = await this.grantsLookup(resourceId);
+                if (remoteGrants) {
+                    const importedFields = [];
+                    for (const field of ['grants', 'grants_clk']) {
+                        if (!effectiveGrants[field][resourceId] && remoteGrants[field]) {
+                            effectiveGrants[field][resourceId] = remoteGrants[field];
+                            importedFields.push(field);
+
+                            if (grantsPayload && typeof grantsPayload === 'object') {
+                                if (!grantsPayload[field]
+                                    || typeof grantsPayload[field] !== 'object') {
+                                    grantsPayload[field] = {};
+                                }
+                                grantsPayload[field][resourceId] = remoteGrants[field];
+                            }
+                        }
+                    }
+                    if (importedFields.length > 0) {
+                        this.log(
+                            `  Key material source: Keymaster grants API (${importedFields.join(', ')})`,
+                        );
+                    } else {
+                        this.log('  Keymaster grants API returned no additional key material');
+                    }
+                } else {
+                    this.log(`  No grants API record was found for ${resourceId}`);
                 }
-                this.log(`  grants_clk source: authenticated Cloudflare KV`);
+            } catch (error) {
+                const hasLocalKeyMaterial = Object.keys(effectiveGrants.grants).length > 0
+                    || Object.keys(effectiveGrants.grants_clk).length > 0;
+                if (!hasLocalKeyMaterial) {
+                    throw new Error(
+                        `Keymaster grants API lookup failed for resource ${resourceId}: ${error.message}`,
+                    );
+                }
+                this.log(`  Keymaster grants API lookup warning: ${error.message}`);
             }
         }
 

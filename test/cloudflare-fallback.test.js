@@ -30,7 +30,7 @@ function innerWrap(cleartext, key, name, nonceByte) {
     return Buffer.concat([header, chacha20(key, nonce, cleartext)]);
 }
 
-test('decrypts with Cloudflare grants_clk when no CFX grant exists', async (context) => {
+test('decrypts with grants API data when no CFX grant exists', async (context) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-cloudflare-fallback-'));
     context.after(() => fs.rmSync(root, { force: true, recursive: true }));
     const resource = path.join(root, 'resource');
@@ -40,38 +40,48 @@ test('decrypts with Cloudflare grants_clk when no CFX grant exists', async (cont
     const resourceId = 123456;
     const grantsClk = Buffer.from([...Array(48).keys()]);
     const derivedKey = Buffer.alloc(32, 0xa5);
+    const remoteGrant = Buffer.alloc(32, 0x3c);
     const control = Buffer.alloc(100);
     control.writeUInt32BE(resourceId, 74);
     fs.writeFileSync(path.join(resource, '.fxap'), outerWrap(control, 1));
 
-    const plaintext = Buffer.from('{"source":"cloudflare"}\n');
+    const plaintext = Buffer.concat([Buffer.from('RSC7'), Buffer.alloc(32, 0x7e)]);
     fs.writeFileSync(
-        path.join(resource, 'data.json'),
-        outerWrap(innerWrap(plaintext, derivedKey, 'data.json', 2), 3),
+        path.join(resource, 'asset.ytd'),
+        outerWrap(innerWrap(plaintext, derivedKey, 'asset.ytd', 2), 3),
     );
 
     const lookups = [];
     const derivations = [];
+    const grantsPayload = { grants: {}, grants_clk: {} };
     const decryptor = new FxapDecryptor({
         clientKeyDeriver: async (id, clockHex) => {
             derivations.push([id, clockHex]);
             return derivedKey.toString('hex');
         },
-        grantsClkLookup: async (id) => {
+        grantsLookup: async (id) => {
             lookups.push(id);
-            return grantsClk.toString('hex');
+            return {
+                resourceId: id,
+                grants: remoteGrant.toString('hex'),
+                grants_clk: grantsClk.toString('hex'),
+            };
         },
         log: () => {},
         outputDir: output,
         tempDir: path.join(root, 'temp'),
     });
-    const stats = await decryptor.decryptResource(resource, { grants: {}, grants_clk: {} });
+    const stats = await decryptor.decryptResource(resource, grantsPayload);
 
     assert.deepEqual(lookups, [String(resourceId)]);
     assert.deepEqual(derivations, [
         [String(resourceId), grantsClk.toString('hex')],
     ]);
+    assert.equal(grantsPayload.grants[String(resourceId)], remoteGrant.toString('hex'));
+    assert.equal(
+        grantsPayload.grants_clk[String(resourceId)], grantsClk.toString('hex'),
+    );
     assert.equal(stats.failed, 0);
     assert.equal(stats.decrypted, 1);
-    assert.deepEqual(fs.readFileSync(path.join(output, 'data.json')), plaintext);
+    assert.deepEqual(fs.readFileSync(path.join(output, 'asset.ytd')), plaintext);
 });

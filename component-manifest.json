@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "fxap-decryptor",
   "title": "FXAP 文件夹解密",
-  "version": "v1.1.1",
+  "version": "v1.2.0",
   "entry": "index.js",
   "node": ">=18",
   "java": {
@@ -19,6 +19,7 @@
     "VERSION",
     "component-manifest.json",
     "src/cloudflare-grants.js",
+    "src/grants-api.js",
     "src/constants.js",
     "src/crypto.js",
     "src/decryptor.js",

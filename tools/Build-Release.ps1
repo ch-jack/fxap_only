@@ -72,6 +72,7 @@ $releaseFiles = @(
     'VERSION',
     'component-manifest.json',
     'src\cloudflare-grants.js',
+    'src\grants-api.js',
     'src\constants.js',
     'src\crypto.js',
     'src\decryptor.js',
@@ -144,11 +145,14 @@ foreach ($directoryName in @('.git', 'node_modules', 'test', 'coverage')) {
     }
 }
 $exampleEnvironment = [IO.File]::ReadAllText((Join-Path $stage '.env.example')).Replace([string][char]13, '').Trim()
-$expectedEnvironment = 'CK_GRANTS_CLK_API_URL=https://grantsclk.ckcloud.de5.net' +
-    [string][char]10 +
-    'CK_GRANTS_CLK_API_TOKEN=replace-with-your-bearer-token'
+$expectedEnvironment = @(
+    '# Optional overrides. The release works without creating a .env file.',
+    '# CK_KEYMASTER_GRANTS_API_URL=http://127.0.0.1:3000',
+    '# CK_KEYMASTER_GRANTS_API_TOKEN=replace-with-an-alternate-bearer-token',
+    '# CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net'
+) -join [string][char]10
 if ($exampleEnvironment -ne $expectedEnvironment) {
-    throw '.env.example 必须只保留公开接口地址和 Bearer Token 占位值。'
+    throw '.env.example 必须只保留可选的 API 覆盖配置和 Token 占位值。'
 }
 
 Compress-Archive -LiteralPath $stage -DestinationPath $asset -CompressionLevel Optimal

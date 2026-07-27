@@ -1,63 +1,65 @@
 # FXAP Decryptor
 
-独立的 FiveM FXAP 资源解密工具。CFX server key 是可选参数：有 key 时先使用官方 Keymaster；缺少目标 `grants_clk` 时，通过 Bearer 鉴权从 Cloudflare Workers KV 查询。客户端最终 key 与 dump-tool 一样由 Cloudflare `/v1/derive` 返回，仓库不包含当前真实派生公式。
+用于解密已获授权的 FiveM FXAP 资源。CFX Key 是可选参数：提供 Key 时先通过官方 Cfx.re Keymaster 校验并读取 grants；没有 Key、Key 校验失败，或当前 resource 的密钥数据不完整时，工具会按 resource ID 查询 Keymaster grants API。
+
+客户端密钥仍按 dump-tool 的方式由 Cloudflare `/v1/derive` 返回，真实派生算法不写入本仓库。Cloudflare 不再负责存储或查询 `grants` / `grants_clk`。
+
+## 运行要求
+
+- Node.js 18 或更高版本；
+- Java 仅用于反编译 Lua 5.4 字节码，可不安装；
+- 仓库和 Release 均不内置 Node.js 或 Java；
+- 可将 Java/JDK 目录作为命令行参数传入。
 
 ## 使用
 
-要求 Node.js 18 或更高版本。Lua 反编译需要 Java 8 或更高版本，仓库不内置 Java。
-
-不提供 CFX key：
+不提供 CFX Key：
 
 ```powershell
 node . "D:\server\resources\my_resource"
 node . "D:\server\resources" "C:\Program Files\Java\jdk-21"
 ```
 
-优先使用 CFX Keymaster，缺失时回退 Cloudflare：
+提供 CFX Key：
 
 ```powershell
 node . "cfxk_xxxxxxxxx" "D:\server\resources" "C:\Program Files\Java\jdk-21"
 ```
 
-目录参数可以是直接包含 `.fxap` 的单个 resource，也可以是包含多个 resource 的父目录。输出自动写到输入目录旁边的 `<原目录名>_decrypted`。
+兼容旧参数顺序：
 
-## Cloudflare fallback
+```powershell
+node . "D:\server\resources" "cfxk_xxxxxxxxx"
+```
 
-复制 `.env.example` 为不会提交 Git 的 `.env`，填写 Bearer Token：
+目录参数可以是直接包含 `.fxap` 的单个 resource，也可以是包含多个 resource 的父目录。输出自动写入输入目录旁边的 `<原目录名>_decrypted`。
+
+## 密钥请求流程
+
+1. 提供 CFX Key 时，先向官方 Keymaster 请求 grants。只有官方校验成功后，才调用 `POST /v1/keymaster/import` 将该 Key 导入 grants API。
+2. 读取每个 `.fxap` 中的 resource ID。若本地缺少该 ID 的 `grants` 或 `grants_clk`，调用 `GET /v1/resources/:resourceId`，一次取得这两个字段。
+3. 存在 `grants_clk` 时，调用 Cloudflare `POST /v1/derive` 取得 32 字节客户端密钥。仓库不包含真实派生公式。
+4. grants API 查询失败但本地已有可用密钥时会警告并继续；完全没有密钥材料时，该 resource 会报告失败。
+
+grants API 的默认地址和公开客户端 Bearer Token 已封装在 `fxap_only` 中，用户无需创建 `.env`，CK 免费工具箱也不提供或传入 Token。当前默认 grants API 使用 HTTP，因此提交的 CFX Key 和 Bearer Token 会以明文经过网络；这是当前部署方式的既定行为。
+
+需要切换部署时，可通过 `.env` 或系统环境变量覆盖：
 
 ```dotenv
-CK_GRANTS_CLK_API_URL=https://grantsclk.ckcloud.de5.net
-CK_GRANTS_CLK_API_TOKEN=replace-with-your-bearer-token
+CK_KEYMASTER_GRANTS_API_URL=http://127.0.0.1:3000
+CK_KEYMASTER_GRANTS_API_TOKEN=replace-with-an-alternate-bearer-token
+CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net
 ```
-
-也可以使用同名系统环境变量。只有本地缺少目标 resource ID 的 `grants_clk` 时，才调用带 Bearer 鉴权的 KV 查询接口。Bearer Token 只由 `fxap_only` 自身读取，CK 免费工具箱不提供、不保存也不传入该 Token：
-
-```http
-GET /v1/grants-clk/:resourceId
-Authorization: Bearer <token>
-```
-
-拿到 `grants_clk` 后，无论它来自 Keymaster 还是 Cloudflare KV，客户端最终 key 都按 dump-tool 的协议请求：
-
-```http
-POST /v1/derive
-Content-Type: application/json
-
-{"resourceId":"7033","grants_clk":"<96位十六进制>"}
-```
-
-`fxap_only` 不实现当前真实客户端派生公式，只校验 Cloudflare 返回的 32 字节 key。Cloudflare 不存在上传接口；CFX key、Bearer Token 和 grants 数据都不会写入 Git。
-
-服务端文件仍直接使用 Keymaster `grants`。只有 `grants_clk` 而没有 `grants` 时，可解开使用客户端派生 key 的文件，但无法替代服务端独立的 `grants` key。
 
 ## 处理内容
 
 - 解开标准 FXAP 文件并保留目录结构；
 - 复制未加密文件；
-- 使用 Java `unluac54.jar` 反编译 Lua 5.4 字节码；
+- 解密服务端 `grants` 文件和客户端派生密钥文件；
+- 使用外部 Java 和 `tools/unluac54.jar` 反编译 Lua 5.4 字节码；
 - 找不到 Java 或反编译失败时保留 `.luac`，可反汇编时同时保留 `.asm`；
 - 保留标准 RSC stream 解密路径；
-- 不包含 `decrypt-eup-stream.js` 的无 `.fxap` EUP 推断、worker 池或固定 `ok` 目录。
+- 不包含 `decrypt-eup-stream.js` 的无 `.fxap` EUP 推断、Worker 池或固定 `ok` 目录功能。
 
 ## 退出码
 
@@ -67,15 +69,18 @@ Content-Type: application/json
 
 ## CK 免费工具箱组件 Release
 
-本仓库按 `component-manifest.json` 发布给 CK 免费工具箱。Release ZIP 只有一个顶层目录，附件名与工具箱登记规则一致：
+本仓库按 `component-manifest.json` 发布给 CK 免费工具箱。工具箱不会内置该组件，而是从 GitHub 最新正式 Release 按需下载并校验 SHA-256。
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-Release.ps1
 ```
 
-默认生成 `dist/fxap-only-v1.1.1-windows.zip` 和 `dist/fxap-only-v1.1.1-windows.zip.sha256`。ZIP 包含运行源码和 `tools/unluac54.jar`，不包含 `.env`、Node.js、Java、Git 元数据、测试输出或真实密钥。Node.js 18+ 与 Java 仍由用户外部安装；Cloudflare 鉴权继续封装在 `fxap_only` 内部。
+`v1.2.0` 默认生成：
 
-推送到 main 后，GitHub Actions 会在 Node.js 18/22 上测试，通过后按 VERSION 的主/次版本和本 workflow 的递增运行编号自动创建稳定 tag 与正式 Release；手工推送稳定 vSemVer tag 时则按该 tag 发布。每个正式 Release 都同时上传 ZIP 和 SHA-256，CK 免费工具箱无需内置该组件，会直接检查并安装最新稳定 Release。
+- `dist/fxap-only-v1.2.0-windows.zip`
+- `dist/fxap-only-v1.2.0-windows.zip.sha256`
+
+ZIP 包含运行源码和 `tools/unluac54.jar`，不包含 `.env`、Node.js、Java、Git 元数据或测试输出。推送到 `main` 后，GitHub Actions 会在 Node.js 18/22 上测试、构建并发布稳定 Release。
 
 ## 验证
 
