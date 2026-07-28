@@ -75,10 +75,10 @@ CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-Release.ps1
 ```
 
-`v1.2.3` 默认生成：
+`v1.2.4` 默认生成：
 
-- `dist/fxap-only-v1.2.3-windows.zip`
-- `dist/fxap-only-v1.2.3-windows.zip.sha256`
+- `dist/fxap-only-v1.2.4-windows.zip`
+- `dist/fxap-only-v1.2.4-windows.zip.sha256`
 
 ZIP 包含运行源码和 `tools/unluac54.jar`，不包含 `.env`、Node.js、Java、Git 元数据或测试输出。推送到 `main` 后，GitHub Actions 会在 Node.js 18/22 上测试、构建并发布稳定 Release。
 

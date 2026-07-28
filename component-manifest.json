@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "fxap-decryptor",
   "title": "FXAP 文件夹解密",
-  "version": "v1.2.3",
+  "version": "v1.2.4",
   "entry": "index.js",
   "node": ">=18",
   "java": {
@@ -11,6 +11,7 @@
     "recommended": "17"
   },
   "networkRequired": true,
+  "apiHealthUrl": "https://www.fengshao.icu/health/ready",
   "releaseAssetPattern": "fxap-only-*-windows.zip",
   "releaseChecksumAssetPattern": "fxap-only-*-windows.zip.sha256",
   "requiredFiles": [

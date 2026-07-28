@@ -115,6 +115,12 @@ if ([string]$manifest.releaseAssetPattern -ne 'fxap-only-*-windows.zip' -or
     throw '组件清单的 Release 附件规则与 CK 免费工具箱不一致。'
 }
 
+$apiHealthUri = [Uri]$null
+if (-not [Uri]::TryCreate([string]$manifest.apiHealthUrl, [UriKind]::Absolute, [ref]$apiHealthUri) -or
+    $apiHealthUri.Scheme -ne [Uri]::UriSchemeHttps) {
+    throw '组件清单的 apiHealthUrl 必须是绝对 HTTPS 地址。'
+}
+
 foreach ($relative in @($manifest.requiredFiles)) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage ([string]$relative)) -PathType Leaf)) {
         throw "组件清单缺少打包文件: $relative"
