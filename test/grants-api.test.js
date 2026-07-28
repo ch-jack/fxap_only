@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+    DEFAULT_API_URL,
     fetchResourceGrants,
     importKeymasterKey,
     resolveGrantsApiConfig,
@@ -22,6 +23,10 @@ function apiOptions(fetchImpl) {
         token: TEST_TOKEN,
     };
 }
+test('uses the HTTPS grants API deployment by default', () => {
+    assert.equal(DEFAULT_API_URL, 'https://www.fengshao.icu');
+});
+
 
 test('prefers explicit Keymaster grants API configuration', () => {
     assert.deepEqual(resolveGrantsApiConfig(apiOptions(async () => {})), {

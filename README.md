@@ -41,12 +41,12 @@ node . "D:\server\resources" "cfxk_xxxxxxxxx"
 3. 存在 `grants_clk` 时，调用 Cloudflare `POST /v1/derive` 取得 32 字节客户端密钥。仓库不包含真实派生公式。
 4. grants API 查询失败但本地已有可用密钥时会警告并继续；完全没有密钥材料时，该 resource 会报告失败。
 
-grants API 的默认地址和公开客户端 Bearer Token 已封装在 `fxap_only` 中，用户无需创建 `.env`，CK 免费工具箱也不提供或传入 Token。当前默认 grants API 使用 HTTP，因此提交的 CFX Key 和 Bearer Token 会以明文经过网络；这是当前部署方式的既定行为。
+grants API 的默认 HTTPS 地址 `https://www.fengshao.icu` 和公开客户端 Bearer Token 已封装在 `fxap_only` 中，用户无需创建 `.env`，CK 免费工具箱也不提供或传入 Token。
 
 需要切换部署时，可通过 `.env` 或系统环境变量覆盖：
 
 ```dotenv
-CK_KEYMASTER_GRANTS_API_URL=http://127.0.0.1:3000
+CK_KEYMASTER_GRANTS_API_URL=https://www.fengshao.icu
 CK_KEYMASTER_GRANTS_API_TOKEN=replace-with-an-alternate-bearer-token
 CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net
 ```
@@ -75,10 +75,10 @@ CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-Release.ps1
 ```
 
-`v1.2.0` 默认生成：
+`v1.2.3` 默认生成：
 
-- `dist/fxap-only-v1.2.0-windows.zip`
-- `dist/fxap-only-v1.2.0-windows.zip.sha256`
+- `dist/fxap-only-v1.2.3-windows.zip`
+- `dist/fxap-only-v1.2.3-windows.zip.sha256`
 
 ZIP 包含运行源码和 `tools/unluac54.jar`，不包含 `.env`、Node.js、Java、Git 元数据或测试输出。推送到 `main` 后，GitHub Actions 会在 Node.js 18/22 上测试、构建并发布稳定 Release。
 

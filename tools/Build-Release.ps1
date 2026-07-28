@@ -147,7 +147,7 @@ foreach ($directoryName in @('.git', 'node_modules', 'test', 'coverage')) {
 $exampleEnvironment = [IO.File]::ReadAllText((Join-Path $stage '.env.example')).Replace([string][char]13, '').Trim()
 $expectedEnvironment = @(
     '# Optional overrides. The release works without creating a .env file.',
-    '# CK_KEYMASTER_GRANTS_API_URL=http://127.0.0.1:3000',
+    '# CK_KEYMASTER_GRANTS_API_URL=https://www.fengshao.icu',
     '# CK_KEYMASTER_GRANTS_API_TOKEN=replace-with-an-alternate-bearer-token',
     '# CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net'
 ) -join [string][char]10

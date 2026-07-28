@@ -6,8 +6,8 @@ const {
     readLocalEnvironment,
 } = require('./cloudflare-grants');
 
-const DEFAULT_API_URL = 'http://116.62.147.132:3000';
-const DEFAULT_API_TOKEN = '8a0d9fe940b36a81f853ba224327691642966601e8ff1834a2f3977a83533404';
+const DEFAULT_API_URL = 'https://www.fengshao.icu';
+const DEFAULT_API_TOKEN = '3f9879ceccfb1028634e35832d8ee199717d625cac46fec525abd9031b8e03f4';
 const DEFAULT_ENV_FILE = path.resolve(__dirname, '..', '.env');
 
 function resolveGrantsApiConfig(options = {}) {
