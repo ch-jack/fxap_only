@@ -14,14 +14,15 @@ const {
 } = require('./src/discover');
 const { resolveJava } = require('./src/java-decompiler');
 const { fetchGrants } = require('./src/keymaster');
+const { repairDecryptedResources, VERTEX_FIX_DISCLAIMER } = require('./src/vertex-fixer');
 
 function printUsage() {
     console.log(`
 FXAP Decryptor
 
 Usage:
-  node . <folder> [java-folder]
-  node . <cfx-key> <folder> [java-folder]
+  node . [--vertex-fix] <folder> [java-folder]
+  node . [--vertex-fix] <cfx-key> <folder> [java-folder]
 
 Examples:
   node . "D:\\server\\resources\\my_resource"
@@ -32,6 +33,9 @@ The CFX key is optional. Client keys are requested from Cloudflare /v1/derive.
 After a CFX key passes official Keymaster validation, its grants are imported
 into the Keymaster grants API. Without a key, grants and grants_clk are queried
 by resource ID. The client-key derivation formula is not included here.
+
+--vertex-fix creates a complete sibling copy after decryption and repairs only
+.ydr/.yft/.ydd files inside that copy. The decrypted output is never overwritten.
 `);
 }
 
@@ -39,26 +43,39 @@ function parseArguments(argv) {
     if (argv.includes('--help') || argv.includes('-h')) {
         return { help: true };
     }
-    if (argv.length < 1 || argv.length > 3) {
+    const positional = [];
+    let vertexFix = false;
+    for (const argument of argv) {
+        if (argument === '--vertex-fix') {
+            vertexFix = true;
+        } else if (argument.startsWith('--')) {
+            throw new Error(`Unknown option: ${argument}`);
+        } else {
+            positional.push(argument);
+        }
+    }
+    if (positional.length < 1 || positional.length > 3) {
         throw new Error('Required argument: folder; optional arguments: CFX key and Java folder');
     }
 
-    if (argv.length === 1) {
+    if (positional.length === 1) {
         return {
             cfxKey: null,
-            folder: argv[0],
+            folder: positional[0],
             help: false,
             javaDirectory: null,
+            vertexFix,
         };
     }
 
-    const [first, second, third] = argv;
+    const [first, second, third] = positional;
     if (first.startsWith('cfxk_')) {
         return {
             cfxKey: first,
             folder: second,
             help: false,
             javaDirectory: third || null,
+            vertexFix,
         };
     }
     if (second.startsWith('cfxk_')) {
@@ -67,14 +84,16 @@ function parseArguments(argv) {
             folder: first,
             help: false,
             javaDirectory: third || null,
+            vertexFix,
         };
     }
-    if (argv.length === 2) {
+    if (positional.length === 2) {
         return {
             cfxKey: null,
             folder: first,
             help: false,
             javaDirectory: second,
+            vertexFix,
         };
     }
     throw new Error('Three arguments require a CFX key in the first or second position');
@@ -172,6 +191,7 @@ async function main(argv = process.argv.slice(2)) {
     const tempSession = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-decryptor-'));
     let failedFiles = 0;
     let failedResources = 0;
+    const resourceResults = [];
 
     try {
         for (let index = 0; index < resources.length; index += 1) {
@@ -194,9 +214,23 @@ async function main(argv = process.argv.slice(2)) {
                 });
                 const stats = await decryptor.decryptResource(resourcePath, grantsPayload);
                 failedFiles += stats.failed;
+                resourceResults.push({
+                    displayName,
+                    outputDir,
+                    resourcePath,
+                    stats,
+                    success: stats.failed === 0,
+                });
                 console.log(`  Done: ${formatStats(stats)}`);
             } catch (error) {
                 failedResources += 1;
+                resourceResults.push({
+                    displayName,
+                    error: error.message,
+                    outputDir,
+                    resourcePath,
+                    success: false,
+                });
                 console.error(`  Failed: ${error.message}`);
             }
         }
@@ -208,18 +242,49 @@ async function main(argv = process.argv.slice(2)) {
         }
     }
 
+    let vertexFix = null;
+    if (options.vertexFix) {
+        console.log(`Vertex fix warning: ${VERTEX_FIX_DISCLAIMER}`);
+        try {
+            vertexFix = await repairDecryptedResources(resourceResults, outputRoot, {
+                log: (message) => console.log(message),
+            });
+        } catch (error) {
+            vertexFix = {
+                enabled: true,
+                error: error.message,
+                failedFiles: 1,
+                outputRoot: '',
+                repairedFiles: 0,
+                resourcesCopied: 0,
+                scannedFiles: 0,
+                status: 'failed',
+            };
+            console.warn(`Vertex fix failed; decrypted output was not changed: ${error.message}`);
+        }
+        console.log(
+            `Vertex fix: status=${vertexFix.status} resources=${vertexFix.resourcesCopied} `
+            + `scanned=${vertexFix.scannedFiles} repaired=${vertexFix.repairedFiles} `
+            + `failed=${vertexFix.failedFiles}`,
+        );
+        if (vertexFix.outputRoot) {
+            console.log(`Vertex fix output: ${vertexFix.outputRoot}`);
+        }
+    }
+
     console.log(
         `Finished: resources=${resources.length} resource-failures=${failedResources} file-failures=${failedFiles}`,
     );
     console.log(`Output: ${outputRoot}`);
-    return { failedFiles, failedResources, outputRoot };
+    return { failedFiles, failedResources, outputRoot, resourceResults, vertexFix };
 }
 
 if (require.main === module) {
     main().then((result) => {
         if (result.failedResources > 0) {
             process.exitCode = 1;
-        } else if (result.failedFiles > 0) {
+        } else if (result.failedFiles > 0
+            || (result.vertexFix && ['failed', 'partial'].includes(result.vertexFix.status))) {
             process.exitCode = 2;
         }
     }).catch((error) => {

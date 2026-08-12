@@ -79,8 +79,17 @@ $releaseFiles = @(
     'src\discover.js',
     'src\java-decompiler.js',
     'src\keymaster.js',
+    'src\vertex-fixer.js',
     'tools\unluac54.jar',
-    'tools\unluac54.jar.sha256'
+    'tools\unluac54.jar.sha256',
+    'tools\vertex-fixer\FivemDecryptFixer.Cli.exe',
+    'tools\vertex-fixer\FivemDecryptFixer.Cli.dll',
+    'tools\vertex-fixer\FivemDecryptFixer.Cli.deps.json',
+    'tools\vertex-fixer\FivemDecryptFixer.Cli.runtimeconfig.json',
+    'tools\vertex-fixer\FivemDecryptFixer.dll',
+    'tools\vertex-fixer\CodeWalker.Core.dll',
+    'tools\vertex-fixer\SharpDX.dll',
+    'tools\vertex-fixer\SharpDX.Mathematics.dll'
 )
 foreach ($relative in $releaseFiles) {
     Copy-FxapRequiredFile -RelativePath $relative
@@ -137,6 +146,18 @@ if (-not $jarChecksumMatch.Success) {
 $actualJarHash = (Get-FileHash -LiteralPath $jarPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actualJarHash -ne $jarChecksumMatch.Value.ToLowerInvariant()) {
     throw "unluac54.jar 校验失败。期望: $($jarChecksumMatch.Value)，实际: $actualJarHash"
+}
+
+$vertexFixer = Join-Path $stage 'tools\vertex-fixer\FivemDecryptFixer.Cli.exe'
+$vertexProbe = Join-Path $stage '.vertex-fixer-probe'
+New-Item -ItemType Directory -Force -Path $vertexProbe | Out-Null
+try {
+    $probeOutput = & $vertexFixer fix-models $vertexProbe 2>&1
+    if ($LASTEXITCODE -ne 0 -or ($probeOutput -join [Environment]::NewLine) -notmatch '\[MODEL\]\s+scanned=0,\s*repaired=0,\s*failed=0') {
+        throw "顶点修复 CLI 运行校验失败：$($probeOutput -join [Environment]::NewLine)"
+    }
+} finally {
+    Remove-Item -LiteralPath $vertexProbe -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 $forbiddenFiles = @('.env', 'node.exe', 'java.exe')

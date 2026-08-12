@@ -76,8 +76,7 @@ jobs:
               throw "Only stable vSemVer tags can be released: $releaseTag"
             }
           } else {
-            $releasePatch = [Math]::Max($basePatch, [int]$env:GITHUB_RUN_NUMBER)
-            $releaseTag = "v$baseMajor.$baseMinor.$releasePatch"
+            $releaseTag = $declared
           }
           $assetName = "fxap-only-$releaseTag-windows.zip"
           $publish = if ($env:GITHUB_EVENT_NAME -eq 'pull_request') { 'false' } else { 'true' }
@@ -131,8 +130,17 @@ jobs:
               'src/cloudflare-grants.js',
               'src/grants-api.js',
               'src/keymaster.js',
+              'src/vertex-fixer.js',
               'tools/unluac54.jar',
-              'tools/unluac54.jar.sha256'
+              'tools/unluac54.jar.sha256',
+              'tools/vertex-fixer/FivemDecryptFixer.Cli.exe',
+              'tools/vertex-fixer/FivemDecryptFixer.Cli.dll',
+              'tools/vertex-fixer/FivemDecryptFixer.Cli.deps.json',
+              'tools/vertex-fixer/FivemDecryptFixer.Cli.runtimeconfig.json',
+              'tools/vertex-fixer/FivemDecryptFixer.dll',
+              'tools/vertex-fixer/CodeWalker.Core.dll',
+              'tools/vertex-fixer/SharpDX.dll',
+              'tools/vertex-fixer/SharpDX.Mathematics.dll'
             ) | ForEach-Object { "$rootName/$_" }
             $entryNames = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
             foreach ($entry in $requiredEntries) {

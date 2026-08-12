@@ -10,6 +10,7 @@ test('accepts a resource folder without a CFX key', () => {
         folder: 'D:\\resources',
         help: false,
         javaDirectory: null,
+        vertexFix: false,
     });
 });
 
@@ -19,6 +20,7 @@ test('accepts folder plus Java directory without a CFX key', () => {
         folder: 'D:\\resources',
         help: false,
         javaDirectory: 'C:\\Java\\jdk-21',
+        vertexFix: false,
     });
 });
 
@@ -32,11 +34,26 @@ test('accepts CFX key, resource folder, and optional Java directory', () => {
         folder: 'D:\\resources',
         help: false,
         javaDirectory: 'C:\\Program Files\\Java\\jdk-21',
+        vertexFix: false,
     });
 });
 
 test('preserves the compatibility order folder then CFX key', () => {
     assert.equal(parseArguments(['D:\\resources', 'cfxk_test']).cfxKey, 'cfxk_test');
+});
+
+test('accepts vertex repair independently of positional argument order', () => {
+    assert.deepEqual(parseArguments([
+        'D:\\resources',
+        '--vertex-fix',
+        'C:\\Java\\jdk-21',
+    ]), {
+        cfxKey: null,
+        folder: 'D:\\resources',
+        help: false,
+        javaDirectory: 'C:\\Java\\jdk-21',
+        vertexFix: true,
+    });
 });
 
 function silentLogger() {

@@ -8,6 +8,7 @@
 
 - Node.js 18 或更高版本；
 - Java 仅用于反编译 Lua 5.4 字节码，可不安装；
+- 可选顶点修复需要外部安装 .NET 8 Runtime；
 - 仓库和 Release 均不内置 Node.js 或 Java；
 - 可将 Java/JDK 目录作为命令行参数传入。
 
@@ -30,6 +31,12 @@ node . "cfxk_xxxxxxxxx" "D:\server\resources" "C:\Program Files\Java\jdk-21"
 
 ```powershell
 node . "D:\server\resources" "cfxk_xxxxxxxxx"
+```
+
+解密后生成完整副本并进行顶点修复：
+
+```powershell
+node . --vertex-fix "D:\server\resources"
 ```
 
 目录参数可以是直接包含 `.fxap` 的单个 resource，也可以是包含多个 resource 的父目录。输出自动写入输入目录旁边的 `<原目录名>_decrypted`。
@@ -59,7 +66,10 @@ CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net
 - 使用外部 Java 和 `tools/unluac54.jar` 反编译 Lua 5.4 字节码；
 - 找不到 Java 或反编译失败时保留 `.luac`，可反汇编时同时保留 `.asm`；
 - 保留标准 RSC stream 解密路径；
+- 可选 `--vertex-fix`：只复制本次完整解密成功的 FXAP 资源，在原输出目录旁生成 `<输出目录>_顶点修复`，仅修复副本内的 `.ydr/.yft/.ydd`；原解密目录不会被覆盖；
 - 不包含 `decrypt-eup-stream.js` 的无 `.fxap` EUP 推断、Worker 池或固定 `ok` 目录功能。
+
+顶点修复不等于模型修复，不一定能 100% 修复模型，也不保证修复后的模型可以被 FiveM 加载。
 
 ## 退出码
 
@@ -75,12 +85,12 @@ CK_CLIENT_KEY_API_URL=https://grantsclk.ckcloud.de5.net
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-Release.ps1
 ```
 
-`v1.2.4` 默认生成：
+`v1.3.0` 默认生成：
 
-- `dist/fxap-only-v1.2.4-windows.zip`
-- `dist/fxap-only-v1.2.4-windows.zip.sha256`
+- `dist/fxap-only-v1.3.0-windows.zip`
+- `dist/fxap-only-v1.3.0-windows.zip.sha256`
 
-ZIP 包含运行源码和 `tools/unluac54.jar`，不包含 `.env`、Node.js、Java、Git 元数据或测试输出。推送到 `main` 后，GitHub Actions 会在 Node.js 18/22 上测试、构建并发布稳定 Release。
+ZIP 包含运行源码、`tools/unluac54.jar` 和顶点修复 CLI 的最小 Windows 运行文件，不包含 `.env`、Node.js、Java、.NET Runtime、Git 元数据或测试输出。推送到 `main` 后，GitHub Actions 会在 Node.js 18/22 上测试、构建并发布稳定 Release。
 
 ## 验证
 
