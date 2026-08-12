@@ -123,12 +123,17 @@ function runFixer(executable, workRoot, options = {}) {
 
 function copyDirectoryContents(source, destination) {
     fs.mkdirSync(destination, { recursive: true });
-    for (const entry of fs.readdirSync(source)) {
-        fs.cpSync(
-            path.join(source, entry),
-            path.join(destination, entry),
-            { recursive: true },
-        );
+    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+        if (entry.isSymbolicLink()) {
+            continue;
+        }
+        const sourcePath = path.join(source, entry.name);
+        const destinationPath = path.join(destination, entry.name);
+        if (entry.isDirectory()) {
+            copyDirectoryContents(sourcePath, destinationPath);
+        } else if (entry.isFile()) {
+            fs.copyFileSync(sourcePath, destinationPath);
+        }
     }
 }
 
@@ -181,7 +186,7 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
     try {
         fs.mkdirSync(copyStage, { recursive: false });
         for (const item of successful) {
-            const resolvedOutput = path.resolve(outputRoot);
+            const resolvedOutput = path.resolve(result.sourceOutputRoot);
             const resolvedResource = path.resolve(item.outputDir);
             const relative = path.relative(resolvedOutput, resolvedResource);
             if (relative.startsWith('..') || path.isAbsolute(relative)) {
@@ -190,7 +195,7 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
             if (!relative) {
                 copyDirectoryContents(resolvedResource, copyStage);
             } else {
-                fs.cpSync(resolvedResource, path.join(copyStage, relative), { recursive: true });
+                copyDirectoryContents(resolvedResource, path.join(copyStage, relative));
             }
             result.resourcesCopied += 1;
         }
@@ -203,7 +208,7 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
     log(`Vertex fix source remains unchanged: ${path.resolve(outputRoot)}`);
     log(`Vertex fix copy: ${fixedRoot}`);
 
-    const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-vertex-fix-'));
+    const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-vertex-repair-'));
     try {
         for (const modelPath of listFixableFiles(fixedRoot)) {
             const relative = path.relative(fixedRoot, modelPath);
