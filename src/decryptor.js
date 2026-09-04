@@ -466,7 +466,7 @@ class FxapDecryptor {
         const needsLookup = !effectiveGrants.grants[resourceId]
             || !effectiveGrants.grants_clk[resourceId];
         if (needsLookup && this.grantsLookup) {
-            this.log(`  Key material incomplete locally; querying grants API for ${resourceId}`);
+            this.log(`  Key material incomplete in the initial payload; checking configured grants sources for ${resourceId}`);
             try {
                 const remoteGrants = await this.grantsLookup(resourceId);
                 if (remoteGrants) {
@@ -486,8 +486,11 @@ class FxapDecryptor {
                         }
                     }
                     if (importedFields.length > 0) {
+                        const keyMaterialSource = typeof remoteGrants.source === 'string'
+                            ? remoteGrants.source
+                            : 'Keymaster grants API';
                         this.log(
-                            `  Key material source: Keymaster grants API (${importedFields.join(', ')})`,
+                            `  Key material source: ${keyMaterialSource} (${importedFields.join(', ')})`,
                         );
                     } else {
                         this.log('  Keymaster grants API returned no additional key material');

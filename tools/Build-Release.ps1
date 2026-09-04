@@ -65,6 +65,7 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 $releaseFiles = @(
     'index.js',
+    'grants.json',
     'package.json',
     'README.md',
     'THIRD_PARTY_NOTICES.md',
@@ -73,6 +74,7 @@ $releaseFiles = @(
     'component-manifest.json',
     'src\cloudflare-grants.js',
     'src\grants-api.js',
+    'src\local-grants.js',
     'src\constants.js',
     'src\crypto.js',
     'src\decryptor.js',
@@ -83,6 +85,7 @@ $releaseFiles = @(
     'tools\unluac54.jar',
     'tools\unluac54.jar.sha256',
     'tools\vertex-fixer\FivemDecryptFixer.Cli.exe',
+    'tools\vertex-fixer\CK.VertexBridge.dll',
     'tools\vertex-fixer\FivemDecryptFixer.Cli.dll',
     'tools\vertex-fixer\FivemDecryptFixer.Cli.deps.json',
     'tools\vertex-fixer\FivemDecryptFixer.Cli.runtimeconfig.json',
@@ -162,6 +165,9 @@ try {
 
 $forbiddenFiles = @('.env', 'node.exe', 'java.exe')
 foreach ($file in @(Get-ChildItem -LiteralPath $stage -Recurse -File)) {
+    if ($file.Extension -ieq '.pdb') {
+        throw "Release 不应包含 PDB 文件: $($file.FullName)"
+    }
     if ($file.Name -in $forbiddenFiles) {
         throw "Release 不应包含文件: $($file.FullName)"
     }

@@ -14,6 +14,7 @@ const {
 } = require('./src/discover');
 const { resolveJava } = require('./src/java-decompiler');
 const { fetchGrants } = require('./src/keymaster');
+const { createLocalFirstGrantsLookup } = require('./src/local-grants');
 const { repairDecryptedResources, VERTEX_FIX_DISCLAIMER } = require('./src/vertex-fixer');
 
 function printUsage() {
@@ -127,7 +128,7 @@ async function loadInitialGrants(cfxKey, dependencies = {}) {
     const empty = { grants: {}, grants_clk: {} };
 
     if (!cfxKey) {
-        logger.log('No CFX key supplied; using the Keymaster grants API by resource ID.');
+        logger.log('No CFX key supplied; checking local grants.json before the grants API.');
         return empty;
     }
 
@@ -187,6 +188,12 @@ async function main(argv = process.argv.slice(2)) {
     }
 
     const grantsPayload = await loadInitialGrants(options.cfxKey);
+    const grantsLookup = options.cfxKey
+        ? (resourceId) => fetchResourceGrants(resourceId)
+        : createLocalFirstGrantsLookup({
+            logger: console,
+            remoteLookup: (resourceId) => fetchResourceGrants(resourceId),
+        });
 
     const tempSession = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-decryptor-'));
     let failedFiles = 0;
@@ -206,7 +213,7 @@ async function main(argv = process.argv.slice(2)) {
                 const decryptor = new FxapDecryptor({
                     clientKeyDeriver: (resourceId, grantsClk) =>
                         deriveClientKey(resourceId, grantsClk),
-                    grantsLookup: (resourceId) => fetchResourceGrants(resourceId),
+                    grantsLookup,
                     javaDirectory: options.javaDirectory,
                     log: (message) => console.log(message),
                     outputDir,

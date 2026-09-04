@@ -124,16 +124,19 @@ jobs:
             }
             $requiredEntries = @(
               'index.js',
+              'grants.json',
               'package.json',
               'VERSION',
               'component-manifest.json',
               'src/cloudflare-grants.js',
               'src/grants-api.js',
+              'src/local-grants.js',
               'src/keymaster.js',
               'src/vertex-fixer.js',
               'tools/unluac54.jar',
               'tools/unluac54.jar.sha256',
               'tools/vertex-fixer/FivemDecryptFixer.Cli.exe',
+              'tools/vertex-fixer/CK.VertexBridge.dll',
               'tools/vertex-fixer/FivemDecryptFixer.Cli.dll',
               'tools/vertex-fixer/FivemDecryptFixer.Cli.deps.json',
               'tools/vertex-fixer/FivemDecryptFixer.Cli.runtimeconfig.json',
@@ -145,6 +148,9 @@ jobs:
             $entryNames = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
             foreach ($entry in $requiredEntries) {
               if ($entry -notin $entryNames) { throw "Release ZIP is missing: $entry" }
+            }
+            if (@($entryNames | Where-Object { $_ -match '(?i)\.pdb$' }).Count -ne 0) {
+              throw 'Release ZIP must not contain PDB files.'
             }
           } finally {
             $archive.Dispose()
