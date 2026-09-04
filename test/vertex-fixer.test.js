@@ -19,7 +19,7 @@ test('creates a non-overwriting sibling vertex-fix directory', (context) => {
     const output = path.join(root, 'resource_decrypted');
     fs.mkdirSync(output);
     const first = createVertexFixOutputRoot(output);
-    assert.equal(first, path.join(root, 'resource_decrypted_顶点修复'));
+    assert.equal(first, path.join(root, 'resource_decrypted_模型修复'));
     fs.mkdirSync(first);
     assert.notEqual(createVertexFixOutputRoot(output), first);
 });
@@ -38,7 +38,7 @@ test('buffers split UTF-8 output and split repair summary lines', async () => {
         child.stdout = new EventEmitter();
         child.stderr = new EventEmitter();
         process.nextTick(() => {
-            const output = Buffer.from('正在修复顶点\n[MODEL] scanned=2, repaired=1, failed=1\n');
+            const output = Buffer.from('正在进行模型修复\n[MODEL] scanned=2, repaired=1, failed=1\n');
             child.stdout.emit('data', output.subarray(0, 5));
             child.stdout.emit('data', output.subarray(5, 31));
             child.stdout.emit('data', output.subarray(31));
@@ -59,7 +59,7 @@ test('buffers split UTF-8 output and split repair summary lines', async () => {
         scannedFiles: result.scannedFiles,
     }, { failedFiles: 1, repairedFiles: 1, scannedFiles: 2 });
     assert.equal(messages.length, 2);
-    assert.match(messages[0], /正在修复顶点/);
+    assert.match(messages[0], /正在进行模型修复/);
 });
 
 test('marks a zero-exit fixer with failed files as partial', async (context) => {
@@ -187,7 +187,7 @@ test('does not expose an incomplete vertex-fix directory when the copy fails', a
         }], output, { executable }),
     );
 
-    assert.equal(fs.existsSync(path.join(root, 'resources_decrypted_顶点修复')), false);
+    assert.equal(fs.existsSync(path.join(root, 'resources_decrypted_模型修复')), false);
     assert.deepEqual(
         fs.readdirSync(root).filter((name) => name.includes('.copying-')),
         [],

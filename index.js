@@ -15,7 +15,7 @@ const {
 const { resolveJava } = require('./src/java-decompiler');
 const { fetchGrants } = require('./src/keymaster');
 const { createLocalFirstGrantsLookup } = require('./src/local-grants');
-const { repairDecryptedResources, VERTEX_FIX_DISCLAIMER } = require('./src/vertex-fixer');
+const { repairDecryptedResources } = require('./src/vertex-fixer');
 
 function printUsage() {
     console.log(`
@@ -251,7 +251,6 @@ async function main(argv = process.argv.slice(2)) {
 
     let vertexFix = null;
     if (options.vertexFix) {
-        console.log(`Vertex fix warning: ${VERTEX_FIX_DISCLAIMER}`);
         try {
             vertexFix = await repairDecryptedResources(resourceResults, outputRoot, {
                 log: (message) => console.log(message),
@@ -267,15 +266,15 @@ async function main(argv = process.argv.slice(2)) {
                 scannedFiles: 0,
                 status: 'failed',
             };
-            console.warn(`Vertex fix failed; decrypted output was not changed: ${error.message}`);
+            console.warn(`Model repair failed; decrypted output was not changed: ${error.message}`);
         }
         console.log(
-            `Vertex fix: status=${vertexFix.status} resources=${vertexFix.resourcesCopied} `
+            `Model repair: status=${vertexFix.status} resources=${vertexFix.resourcesCopied} `
             + `scanned=${vertexFix.scannedFiles} repaired=${vertexFix.repairedFiles} `
             + `failed=${vertexFix.failedFiles}`,
         );
         if (vertexFix.outputRoot) {
-            console.log(`Vertex fix output: ${vertexFix.outputRoot}`);
+            console.log(`Model repair output: ${vertexFix.outputRoot}`);
         }
     }
 

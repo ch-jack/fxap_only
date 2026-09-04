@@ -157,7 +157,7 @@ New-Item -ItemType Directory -Force -Path $vertexProbe | Out-Null
 try {
     $probeOutput = & $vertexFixer fix-models $vertexProbe 2>&1
     if ($LASTEXITCODE -ne 0 -or ($probeOutput -join [Environment]::NewLine) -notmatch '\[MODEL\]\s+scanned=0,\s*repaired=0,\s*failed=0') {
-        throw "顶点修复 CLI 运行校验失败：$($probeOutput -join [Environment]::NewLine)"
+        throw "模型修复 CLI 运行校验失败：$($probeOutput -join [Environment]::NewLine)"
     }
 } finally {
     Remove-Item -LiteralPath $vertexProbe -Recurse -Force -ErrorAction SilentlyContinue

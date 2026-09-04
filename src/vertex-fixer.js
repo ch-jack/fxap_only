@@ -7,14 +7,10 @@ const { spawn } = require('child_process');
 const { StringDecoder } = require('string_decoder');
 
 const FIXABLE_EXTENSIONS = new Set(['.ydd', '.ydr', '.yft']);
-const VERTEX_FIX_DISCLAIMER = [
-    '顶点修复不等于模型修复，不一定能 100% 修复模型，',
-    '也不保证修复后的模型可以被 FiveM 加载。',
-].join('');
 
 function createVertexFixOutputRoot(outputRoot) {
     const resolved = path.resolve(outputRoot);
-    const base = path.join(path.dirname(resolved), `${path.basename(resolved)}_顶点修复`);
+    const base = path.join(path.dirname(resolved), `${path.basename(resolved)}_模型修复`);
     if (!fs.existsSync(base)) {
         return base;
     }
@@ -29,7 +25,7 @@ function createVertexFixOutputRoot(outputRoot) {
             return candidate;
         }
     }
-    throw new Error('无法创建唯一的顶点修复输出目录');
+    throw new Error('无法创建唯一的模型修复输出目录');
 }
 
 function listFixableFiles(root) {
@@ -86,7 +82,7 @@ function runFixer(executable, workRoot, options = {}) {
                     return;
                 }
                 lines.push(line);
-                log(`  [顶点修复] ${line}`);
+                log(`  [模型修复] ${line}`);
             };
             return {
                 collect(chunk) {
@@ -150,7 +146,7 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
         }
     });
     const result = {
-        disclaimer: VERTEX_FIX_DISCLAIMER,
+        disclaimer: '',
         enabled: true,
         exitCode: null,
         failedFiles: 0,
@@ -164,7 +160,7 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
     };
     if (successful.length === 0) {
         result.status = 'skipped';
-        log('Vertex fix skipped: no successfully decrypted FXAP resources.');
+        log('Model repair skipped: no successfully decrypted FXAP resources.');
         return result;
     }
 
@@ -178,7 +174,7 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
         executableExists = false;
     }
     if (!executableExists) {
-        throw new Error(`缺少顶点修复工具: ${executable}`);
+        throw new Error(`缺少模型修复工具: ${executable}`);
     }
 
     const fixedRoot = createVertexFixOutputRoot(outputRoot);
@@ -205,8 +201,8 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
         throw error;
     }
     result.outputRoot = fixedRoot;
-    log(`Vertex fix source remains unchanged: ${path.resolve(outputRoot)}`);
-    log(`Vertex fix copy: ${fixedRoot}`);
+    log(`Model repair source remains unchanged: ${path.resolve(outputRoot)}`);
+    log(`Model repair copy: ${fixedRoot}`);
 
     const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fxap-vertex-repair-'));
     try {
@@ -241,7 +237,6 @@ async function repairDecryptedResources(resourceResults, outputRoot, options = {
 
 module.exports = {
     FIXABLE_EXTENSIONS,
-    VERTEX_FIX_DISCLAIMER,
     createVertexFixOutputRoot,
     listFixableFiles,
     parseFixerSummary,
