@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "fxap-decryptor",
   "title": "FXAP 文件夹解密",
-  "version": "v1.3.4",
+  "version": "v1.3.5",
   "entry": "index.js",
   "node": ">=18",
   "java": {
